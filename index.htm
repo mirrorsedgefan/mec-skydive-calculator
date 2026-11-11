@@ -132,6 +132,33 @@
       pointer-events: none;
       display: none;
     }
+
+        canvas {
+      display: block;
+      touch-action: none; /* Prevents mobile browser page-zoom and pull-to-refresh */
+    }
+
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+      }
+
+      #sidebar {
+        width: 100%;
+        max-height: 38vh;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 12px;
+        gap: 10px;
+      }
+
+      #canvasContainer {
+        flex: 1;
+        min-height: 62vh;
+      }
+    }
+
+
   </style>
 </head>
 <body>
@@ -486,6 +513,95 @@ invertBtn.addEventListener('click', () => {
     themeToggle.addEventListener('click', () => {
       document.body.classList.toggle('dark');
     });
+
+        // Automatically set dark mode on load and listen for OS theme changes
+    const darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    function syncTheme(e) {
+      document.body.classList.toggle('dark', e.matches);
+    }
+    syncTheme(darkMediaQuery);
+    darkMediaQuery.addEventListener('change', syncTheme);
+
+        let initialPinchDist = null;
+    let initialScale = 1;
+    let touchMoved = false;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (!imgLoaded) return;
+
+      if (e.touches.length === 1) {
+        touchMoved = false;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        startDragX = e.touches[0].clientX - offsetX;
+        startDragY = e.touches[0].clientY - offsetY;
+      } else if (e.touches.length === 2) {
+        touchMoved = true;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialPinchDist = Math.hypot(dx, dy);
+        initialScale = scale;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!imgLoaded) return;
+
+      if (e.touches.length === 1 && initialPinchDist === null) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.hypot(dx, dy) > 5) touchMoved = true;
+
+        offsetX = e.touches[0].clientX - startDragX;
+        offsetY = e.touches[0].clientY - startDragY;
+        draw();
+      } else if (e.touches.length === 2 && initialPinchDist) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const currentDist = Math.hypot(dx, dy);
+
+        const rect = canvas.getBoundingClientRect();
+        const midX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+        const midY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
+
+        const newScale = Math.min(Math.max(initialScale * (currentDist / initialPinchDist), 0.05), 50);
+
+        offsetX = midX - (midX - offsetX) * (newScale / scale);
+        offsetY = midY - (midY - offsetY) * (newScale / scale);
+        scale = newScale;
+        draw();
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) {
+        // Place a point if it was a single-finger tap without dragging or pinching
+        if (!touchMoved && initialPinchDist === null && imgLoaded && e.changedTouches.length === 1) {
+          const rect = canvas.getBoundingClientRect();
+          const tapX = e.changedTouches[0].clientX - rect.left;
+          const tapY = e.changedTouches[0].clientY - rect.top;
+
+          const imgX = (tapX - offsetX) / scale;
+          const imgY = (tapY - offsetY) / scale;
+
+          if (imgX >= 0 && imgX <= img.width && imgY >= 0 && imgY <= img.height) {
+            if (!point1) {
+              point1 = { x: imgX, y: imgY };
+            } else {
+              point2 = { x: imgX, y: imgY };
+            }
+            updateStats();
+            draw();
+          }
+        }
+        initialPinchDist = null;
+      }
+    });
+
 
     resizeCanvas();
     loadPreset(presetSelect.selectedOptions[0]);
