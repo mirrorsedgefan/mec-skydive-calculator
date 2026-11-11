@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Distance & Time Calculator</title>
+  <style>
+    :root {
+      --bg-color: #f4f4f9;
+      --text-color: #222;
+      --panel-bg: #ffffff;
+      --border-color: #ccc;
+      --accent-color: #007bff;
+    }
+
+    body.dark {
+      --bg-color: #18181b;
+      --text-color: #f4f4f5;
+      --panel-bg: #27272a;
+      --border-color: #3f3f46;
+      --accent-color: #3b82f6;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #sidebar {
+      width: 320px;
+      background-color: var(--panel-bg);
+      border-right: 1px solid var(--border-color);
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    select, input[type="number"], input[type="file"], button {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-size: 0.9rem;
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      font-weight: 600;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button.secondary {
+      background-color: #6c757d;
+    }
+
+    #themeToggle {
+      width: auto;
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+    }
+
+    .stats {
+      background-color: var(--bg-color);
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    #canvasContainer {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #loadingMsg {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      pointer-events: none;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <h2>
+      Image Distance & Time
+      <button id="themeToggle" title="Toggle Theme">☀ / 🌙</button>
+    </h2>
+
+    <div>
+      <label for="presetSelect">1. Choose Preset Image:</label>
+      <select id="presetSelect">
+        <option
+          value="https://archive.mirrorsedgearchive.org/Mirror's%20Edge%20Catalyst%20(2016)/Maps/anchor%20pipole%20ranges.png"
+          data-x="3413"
+          data-y="5731"
+          selected>
+          Anchor Pipole Ranges
+        </option>
+        <option
+          value="https://archive.mirrorsedgearchive.org/Mirror's%20Edge%20Catalyst%20(2016)/Maps/shard%20pipole%20ranges-greatlyimproved.png"
+          data-x="3962"
+          data-y="1080">
+          Shard Pipole Ranges
+        </option>
+      </select>
+    </div>
+
+    <div>
+      <label for="imageUpload">Or Upload Image:</label>
+      <input type="file" id="imageUpload" accept="image/*" />
+    </div>
+
+    <div>
+      <label for="multiplierSelect">2. Seconds per Pixel (Preset):</label>
+      <select id="multiplierSelect">
+        <option value="1.79203539823" selected>1.79203539823 (Good for tall buildings like The Shard)</option>
+        <option value="1.63953488372">1.63953488372 (Good for less tall buildings)</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="multiplierInput">Active Multiplier (Editable):</label>
+      <input type="number" id="multiplierInput" step="any" value="1.79203539823" />
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button id="resetPointsBtn" class="secondary">Reset Points</button>
+      <button id="resetViewBtn" class="secondary">Reset Zoom & Pan</button>
+    </div>
+
+    <div class="stats">
+      <div><strong>Point 1 (X, Y):</strong> <span id="p1Display">None</span></div>
+      <div><strong>Point 2 (X, Y):</strong> <span id="p2Display">None</span></div>
+      <div><strong>Distance:</strong> <span id="distDisplay">0.00 px</span></div>
+      <div><strong>Time:</strong> <span id="timeDisplay">0h 0m 0s</span></div>
+    </div>
+  </div>
+
+  <div id="canvasContainer">
+    <div id="loadingMsg">Loading image...</div>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvasContainer');
+    const loadingMsg = document.getElementById('loadingMsg');
+
+    const presetSelect = document.getElementById('presetSelect');
+    const imageUpload = document.getElementById('imageUpload');
+    const multiplierSelect = document.getElementById('multiplierSelect');
+    const multiplierInput = document.getElementById('multiplierInput');
+    const resetPointsBtn = document.getElementById('resetPointsBtn');
+    const resetViewBtn = document.getElementById('resetViewBtn');
+    const themeToggle = document.getElementById('themeToggle');
+
+    const p1Display = document.getElementById('p1Display');
+    const p2Display = document.getElementById('p2Display');
+    const distDisplay = document.getElementById('distDisplay');
+    const timeDisplay = document.getElementById('timeDisplay');
+
+    let img = new Image();
+    let imgLoaded = false;
+
+    let point1 = null;
+    let point2 = null;
+
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let isDragging = false;
+    let dragMoved = false;
+    let startDragX = 0;
+    let startDragY = 0;
+
+    function resizeCanvas() {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      draw();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function formatTime(totalSeconds) {
+      const hrs = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = (totalSeconds % 60).toFixed(2);
+      return `${hrs}h ${mins}m ${secs}s`;
+    }
+
+    function updateStats() {
+      p1Display.textContent = point1 ? `${Math.round(point1.x)}, ${Math.round(point1.y)}` : 'None';
+      p2Display.textContent = point2 ? `${Math.round(point2.x)}, ${Math.round(point2.y)}` : 'None';
+
+      if (point1 && point2) {
+        const dx = point2.x - point1.x;
+        const dy = point2.y - point1.y;
+        const dist = Math.hypot(dx, dy);
+        const multiplier = parseFloat(multiplierInput.value) || 0;
+        const totalSeconds = dist * multiplier;
+
+        distDisplay.textContent = `${dist.toFixed(2)} px`;
+        timeDisplay.textContent = formatTime(totalSeconds);
+      } else {
+        distDisplay.textContent = '0.00 px';
+        timeDisplay.textContent = '0h 0m 0s';
+      }
+    }
+
+    function fitImageToScreen() {
+      if (!imgLoaded) return;
+      const scaleX = canvas.width / img.width;
+      const scaleY = canvas.height / img.height;
+      scale = Math.min(scaleX, scaleY) * 0.95;
+      offsetX = (canvas.width - img.width * scale) / 2;
+      offsetY = (canvas.height - img.height * scale) / 2;
+      draw();
+    }
+
+    function loadPreset(option) {
+      if (!option) return;
+      const url = option.value;
+      const presetX = option.getAttribute('data-x');
+      const presetY = option.getAttribute('data-y');
+
+      imgLoaded = false;
+      loadingMsg.style.display = 'block';
+      loadingMsg.textContent = 'Loading image...';
+
+      point1 = (presetX !== null && presetY !== null)
+        ? { x: parseFloat(presetX), y: parseFloat(presetY) }
+        : null;
+      point2 = null;
+      updateStats();
+
+      const newImg = new Image();
+      newImg.onload = () => {
+        img = newImg;
+        imgLoaded = true;
+        loadingMsg.style.display = 'none';
+        fitImageToScreen();
+      };
+      newImg.onerror = () => {
+        loadingMsg.textContent = 'Failed to load image.';
+      };
+      newImg.src = url;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!imgLoaded) return;
+
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      ctx.drawImage(img, 0, 0);
+
+      if (point1 && point2) {
+        ctx.beginPath();
+        ctx.moveTo(point1.x, point1.y);
+        ctx.lineTo(point2.x, point2.y);
+        ctx.strokeStyle = '#ff0055';
+        ctx.lineWidth = Math.max(2 / scale, 1);
+        ctx.stroke();
+      }
+
+      if (point1) {
+        drawMarker(point1.x, point1.y, '#00ff88', '1');
+      }
+
+      if (point2) {
+        drawMarker(point2.x, point2.y, '#ff0055', '2');
+      }
+
+      ctx.restore();
+    }
+
+    function drawMarker(x, y, color, label) {
+      const r = Math.max(6 / scale, 3);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = Math.max(2 / scale, 1);
+      ctx.strokeStyle = '#000';
+      ctx.stroke();
+
+      ctx.font = `bold ${Math.max(14 / scale, 10)}px sans-serif`;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = Math.max(3 / scale, 1.5);
+      ctx.strokeText(label, x + r + 3 / scale, y - r);
+      ctx.fillText(label, x + r + 3 / scale, y - r);
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      dragMoved = false;
+      startDragX = e.clientX - offsetX;
+      startDragY = e.clientY - offsetY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startDragX - offsetX;
+      const dy = e.clientY - startDragY - offsetY;
+      if (Math.hypot(dx, dy) > 3) dragMoved = true;
+
+      offsetX = e.clientX - startDragX;
+      offsetY = e.clientY - startDragY;
+      draw();
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+
+      if (!dragMoved && imgLoaded && e.target === canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const imgX = (mouseX - offsetX) / scale;
+        const imgY = (mouseY - offsetY) / scale;
+
+        if (imgX >= 0 && imgX <= img.width && imgY >= 0 && imgY <= img.height) {
+          if (!point1) {
+            point1 = { x: imgX, y: imgY };
+          } else {
+            point2 = { x: imgX, y: imgY };
+          }
+          updateStats();
+          draw();
+        }
+      }
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (!imgLoaded) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const newScale = Math.min(Math.max(scale * zoomFactor, 0.05), 50);
+
+      offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+      offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+      scale = newScale;
+
+      draw();
+    }, { passive: false });
+
+    presetSelect.addEventListener('change', () => {
+      imageUpload.value = '';
+      loadPreset(presetSelect.selectedOptions[0]);
+    });
+
+    imageUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        point1 = null;
+        point2 = null;
+        updateStats();
+
+        const newImg = new Image();
+        newImg.onload = () => {
+          img = newImg;
+          imgLoaded = true;
+          loadingMsg.style.display = 'none';
+          fitImageToScreen();
+        };
+        newImg.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    multiplierSelect.addEventListener('change', () => {
+      if (multiplierSelect.value !== 'custom') {
+        multiplierInput.value = multiplierSelect.value;
+        updateStats();
+      }
+    });
+
+    multiplierInput.addEventListener('input', () => {
+      multiplierSelect.value = 'custom';
+      updateStats();
+    });
+
+    resetPointsBtn.addEventListener('click', () => {
+      const selected = presetSelect.selectedOptions[0];
+      const presetX = selected ? selected.getAttribute('data-x') : null;
+      const presetY = selected ? selected.getAttribute('data-y') : null;
+
+      if (!imageUpload.files.length && presetX !== null && presetY !== null) {
+        point1 = { x: parseFloat(presetX), y: parseFloat(presetY) };
+      } else {
+        point1 = null;
+      }
+      point2 = null;
+      updateStats();
+      draw();
+    });
+
+    resetViewBtn.addEventListener('click', fitImageToScreen);
+
+    themeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark');
+    });
+
+    resizeCanvas();
+    loadPreset(presetSelect.selectedOptions[0]);
+  </script>
+</body>
+</html>
