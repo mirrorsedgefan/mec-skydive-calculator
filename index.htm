@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Image Distance & Time Calculator</title>
   <style>
+
+.inverted {
+  filter: invert(100%);
+}
+
+
     :root {
       --bg-color: #f4f4f9;
       --text-color: #222;
@@ -176,6 +182,7 @@
     <div style="display: flex; gap: 8px;">
       <button id="resetPointsBtn" class="secondary">Reset Points</button>
       <button id="resetViewBtn" class="secondary">Reset Zoom & Pan</button>
+      <button id="invert-btn" type="button">Invert Image Colors</button>
     </div>
 
     <div class="stats">
@@ -192,6 +199,22 @@
   </div>
 
   <script>
+
+const invertBtn = document.getElementById('invert-btn');
+
+invertBtn.addEventListener('click', () => {
+  // Automatically finds the canvas or image element on your page
+  const targetMedia = document.querySelector('canvas') || document.querySelector('img');
+  
+  if (targetMedia) {
+    targetMedia.classList.toggle('inverted');
+  } else {
+    console.error('Could not find a canvas or img element to invert.');
+  }
+});
+
+
+
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('canvasContainer');
